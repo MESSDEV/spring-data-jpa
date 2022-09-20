@@ -355,8 +355,57 @@ public interface UserRepository extends JpaRepository<User, Long> {
 ----
 ====
 
+[[jpa.query-methods.query-enhancer]]
+===== Enhancing the `@Query`
+
+Spring Data JPA currently has one strategy it applies to combine the query inside the `@Query` annotation along with any parameters, known as `DefaultQueryEnhancer`.
+This query enhancer has limits since it isn't implemented using grammar-based tooling.
+
+If at any time, you need to take control of how your `@Query` annotation is being transformed into a runnable query before it's handed over to the `EntityManager`, you can override it as shown below:
+
+.Overriding the default with a custom `QueryEnhancer` at the repository level
+====
+[source, java]
+----
+@QueryEnhancerOverride(MyCustomQueryEnhancer.class)
+interface UserRepository extends Repository<User, Integer> {
+
+    @Query("Select * from User u")
+    List<User> shouldUseMyCustomQueryEnhancer();
+
+}
+----
+The `@QueryEnhancerOverride` annotation will apply `MyCustomQueryEnhancer` instead of its `DefaultQueryEnhancer` to every `@Query` method in the repository.
+====
+
+It's also possible to apply overrides to the repository _as well as_ on individual methods. See below:
+
+.Overriding at the repository and at the method levels
+====
+[source, java]
+----
+@QueryEnhancerOverride(MyCustomerQueryEnhancer.class)
+interface QueryEnhancerRepositoryMode extends Repository<User, Integer> {
+
+    @Query(value = "Select * from User u")
+    List<User> shouldUseMyCustomQueryEnhancer();
+
+    @Query(value = "Select * from User u")
+    @QueryEnhancerOverride
+    List<User> shouldUseTheDefaultQueryEnhancer();
+}
+----
+Normally, Spring Data JPA would use `DefaultQueryEnhancer` on all of the `@Query` methods.
+However, the `@QueryEnhancerOverride` annotation at the repository level will override that decision by applying the `MyCustomQueryEnhancer` instead.
+However, each method can override the repository-level annotation.
+The first one will defer to the repository.
+And the second one (with no argument) will go back to Spring Data JPA's `DefaultQueryEnhancer`.
+====
+
+IMPORTANT: A method-level override will *always* supercede a repository-level override.
+
 [[jpa.query-methods.query-rewriter]]
-==== Applying a QueryRewriter
+===== Applying a QueryRewriter
 
 Sometimes, no matter how many features you try to apply, it seems impossible to get Spring Data JPA to apply every thing
 you'd like to a query before it is sent to the `EntityManager`.
@@ -491,6 +540,64 @@ public interface UserRepository extends JpaRepository<User, Long> {
 ====
 
 A similar approach also works with named native queries, by adding the `.count` suffix to a copy of your query. You probably need to register a result set mapping for your count query, though.
+
+[[jpa.query-methods.native-query-enhancer]]
+===== Enhancing the Native Query
+
+Spring Data JPA has different strategies for transforming `@Query`-based queries into native ones.
+
+* It's long-standing albeit limited `DefaultQueryEnhancer`.
+* Support for the newer yet more sophisticated https://github.com/JSQLParser/JSqlParser[JSqlParser] project through `JSqlParserQueryEnhancer`.
+
+If `JSqlParser` is on the classpath, Spring Data JPA will attempt to use it when generating native queries. However, if a given query fails, it will attempt to fallback to `DefaultQueryEnhancer`.
+
+However, at any time, you can override Spring Data JPA's decision at any time to pick a different strategy. You can even choose your own extension of `QueryEnhancer` as shown below:
+
+.Overriding Spring Data JPA's choice and applying the `DefaultQueryEnhancer` at the repository level
+====
+[source, java]
+----
+@QueryEnhancerOverride
+interface UserRepository extends Repository<User, Integer> {
+
+    @Query(value = "Select * from User u", nativeQuery = true)
+    List<User> shouldUseDefaultQueryEnhancer();
+
+}
+----
+Assuming *JSqlParser* is on the classpath, the `@Query` method in this repository would normally use the `JSqlParserQueryEnhancer`.
+However, the `@QueryEnhancerOverride` annotation (with no arguments) will instead override that decision by applying the `DefaultQueryEnhancer` instead.
+====
+
+It's also possible to apply overrides on the repository _as well as_ on individual methods. See below:
+
+.Overriding Spring Data JPA's choice and applying the `DefaultQueryEnhancer` at the repository and method levels
+====
+[source, java]
+----
+@QueryEnhancerOverride                                      // <1>
+interface QueryEnhancerRepositoryMode extends Repository<User, Integer> {
+
+    @Query(value = "Select * from User u", nativeQuery = true)
+    @QueryEnhancerOverride(JSqlParserQueryEnhancer.class)   // <2>
+    List<User> shouldUseJSqlParserEnhancer();
+
+    @Query(value = "Select * from User u", nativeQuery = true)
+    List<User> shouldUseDefaultEnhancer();                  // <3>
+
+    @Query(value = "Select * from User u", nativeQuery = true)
+    @QueryEnhancerOverride(MyCustomQueryEnhancer.class)     // <4>
+    List<User> shouldUseMyCustomEnhancer();
+}
+----
+<1> Assuming *JSqlParser* is on the classpath, the `@Query` method in this repository would normally use the `JSqlParserQueryEnhancer` on all of these `@Query` methods.
+However, the `@QueryEnhancerOverride` annotation (with no arguments) at the repository level will override that decision by applying the `DefaultQueryEnhancer` instead.
+<2> But each method can override the repository-level annotation. `shouldUseJSqlParserEnhancer` will instead using Spring Data JPA's `JSqlParserQueryEnhancer`.
+<3> `shouldUseDefaultEnhancer` will defer to the repository's override.
+<4> `shouldUseMycustomEnhancer` will instantiate and apply `MyCustomQueryEnhancer` built by the user.
+====
+
+IMPORTANT: A method-level override will supercede a repository-level override.
 
 [[jpa.query-methods.sorting]]
 === Using Sort

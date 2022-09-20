@@ -15,17 +15,24 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import java.lang.annotation.Annotation;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.data.jpa.repository.query.StringQuery.InParameterBinding;
 import org.springframework.data.jpa.repository.query.StringQuery.LikeParameterBinding;
 import org.springframework.data.jpa.repository.query.StringQuery.ParameterBinding;
+import org.springframework.data.jpa.repository.sample.MyCustomQueryEnhancer;
 import org.springframework.data.repository.query.parser.Part.Type;
 
 /**
@@ -37,6 +44,7 @@ import org.springframework.data.repository.query.parser.Part.Type;
  * @author Nils Borrmann
  * @author Andriy Redko
  * @author Diego Krupitza
+ * @author Greg Turnquist
  */
 class StringQueryUnitTests {
 
@@ -564,6 +572,57 @@ class StringQueryUnitTests {
 		assertThat(query.getParameterBindings()) //
 				.extracting(ParameterBinding::getName) //
 				.containsExactly("age");
+	}
+
+	@Test // GH-2564
+	void usesNoQueryEnhancerOverridesIfNotPresent() {
+
+		String queryString = "SELECT u FROM User u WHERE :age>u.age";
+
+		StringQuery query = new StringQuery(queryString, true, null);
+		assertThat(query.getQueryEnhancer()).isNotNull();
+		assertThat(query.hasQueryEnhancerOverride()).isFalse();
+		assertThat(query.getQueryEnhancerOverride()).isNull();
+	}
+
+	@ParameterizedTest // GH-2564
+	@MethodSource("usesCorrectQueryEnhancerOverrideSource")
+	void usesCorrectQueryEnhancerOverride(Class<? extends QueryEnhancer> override) {
+
+		String queryString = "SELECT u FROM User u WHERE :age>u.age";
+
+		QueryEnhancerOverride queryEnhancerOverride = getQueryEnhancerOverride(override);
+
+		StringQuery query = new StringQuery(queryString, true, queryEnhancerOverride);
+		assertThat(query.getQueryEnhancer()).isNotNull();
+		assertThat(query.hasQueryEnhancerOverride()).isTrue();
+		assertThat(query.getQueryEnhancerOverride()) //
+				.isNotNull() //
+				.extracting(QueryEnhancerOverride::value).isEqualTo(override);
+	}
+
+	static Stream<Arguments> usesCorrectQueryEnhancerOverrideSource() {
+
+		return Stream.of( //
+				Arguments.of(DefaultQueryEnhancer.class), //
+				Arguments.of(JSqlParserQueryEnhancer.class), //
+				Arguments.of(MyCustomQueryEnhancer.class));
+	}
+
+	private static QueryEnhancerOverride getQueryEnhancerOverride(Class<? extends QueryEnhancer> override) {
+
+		return new QueryEnhancerOverride() {
+
+			@Override
+			public Class<? extends Annotation> annotationType() {
+				return QueryEnhancerOverride.class;
+			}
+
+			@Override
+			public Class<? extends QueryEnhancer> value() {
+				return override;
+			}
+		};
 	}
 
 	void checkNumberOfNamedParameters(String query, int expectedSize, String label, boolean nativeQuery) {

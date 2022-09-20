@@ -15,14 +15,22 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.lang.annotation.Annotation;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.data.jpa.repository.sample.MyCustomQueryEnhancer;
 
 /**
  * Unit tests for {@link QueryEnhancerFactory}.
  *
  * @author Diego Krupitza
+ * @author Greg Turnquist
  */
 class QueryEnhancerFactoryUnitTests {
 
@@ -47,4 +55,59 @@ class QueryEnhancerFactoryUnitTests {
 		assertThat(queryEnhancer) //
 				.isInstanceOf(JSqlParserQueryEnhancer.class);
 	}
+
+	@Test // GH-2564
+	void fallsBackToOtherQueryEnhancerWhenUsingHibernatePlaceHolder() {
+
+		StringQuery query = new StringQuery("SELECT c.* FROM {h-schema}countries c", true);
+
+		QueryEnhancer queryEnhancer = QueryEnhancerFactory.forQuery(query);
+
+		assertThat(queryEnhancer) //
+				.isNotInstanceOf(JSqlParserQueryEnhancer.class);
+	}
+
+	@ParameterizedTest // GH-2564
+	@MethodSource("generatesCorrectQueryEnhancerUsingChoiceSource")
+	void generatesCorrectQueryEnhancerUsingChoice(String stringQuery, boolean isNative,
+			Class<? extends QueryEnhancer> choice, Class<? extends QueryEnhancer> expectedEnhancer) {
+
+		QueryEnhancerOverride queryEnhancerOverride = getQueryEnhancerOverride(choice);
+
+		StringQuery query = new StringQuery(stringQuery, isNative, queryEnhancerOverride);
+		assertThat(query.getQueryEnhancer()) //
+				.isNotNull() //
+				.isInstanceOf(expectedEnhancer);
+	}
+
+	static Stream<Arguments> generatesCorrectQueryEnhancerUsingChoiceSource() {
+
+		return Stream.of( //
+				Arguments.of("SELECT u FROM User u", true, DefaultQueryEnhancer.class, DefaultQueryEnhancer.class), //
+				Arguments.of("SELECT u FROM User u", true, JSqlParserQueryEnhancer.class, JSqlParserQueryEnhancer.class), //
+				Arguments.of("SELECT u FROM User u", true, MyCustomQueryEnhancer.class, MyCustomQueryEnhancer.class), //
+
+				Arguments.of("SELECT u FROM com.diegok.User u", false, DefaultQueryEnhancer.class, DefaultQueryEnhancer.class), //
+				Arguments.of("SELECT u FROM com.diegok.User u", false, JSqlParserQueryEnhancer.class,
+						JSqlParserQueryEnhancer.class), //
+				Arguments.of("SELECT u FROM com.diegok.User u", false, MyCustomQueryEnhancer.class, MyCustomQueryEnhancer.class) //
+		);
+	}
+
+	private static QueryEnhancerOverride getQueryEnhancerOverride(Class<? extends QueryEnhancer> choice) {
+
+		return new QueryEnhancerOverride() {
+
+			@Override
+			public Class<? extends Annotation> annotationType() {
+				return QueryEnhancerOverride.class;
+			}
+
+			@Override
+			public Class<? extends QueryEnhancer> value() {
+				return choice;
+			}
+		};
+	}
+
 }

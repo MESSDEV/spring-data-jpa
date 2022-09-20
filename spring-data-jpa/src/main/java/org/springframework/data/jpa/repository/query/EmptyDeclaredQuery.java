@@ -25,6 +25,7 @@ import org.springframework.util.Assert;
  * NULL-Object pattern implementation for {@link DeclaredQuery}.
  *
  * @author Jens Schauder
+ * @author Diego Krupitza
  * @since 2.0.3
  */
 class EmptyDeclaredQuery implements DeclaredQuery {

@@ -18,15 +18,29 @@ package org.springframework.data.jpa.repository.sample;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.QueryHint;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
-import org.springframework.data.domain.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.sample.Role;
 import org.springframework.data.jpa.domain.sample.SpecialUser;
 import org.springframework.data.jpa.domain.sample.User;
-import org.springframework.data.jpa.repository.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.jpa.repository.query.Procedure;
+import org.springframework.data.jpa.repository.query.QueryEnhancerOverride;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
@@ -689,6 +703,13 @@ public interface UserRepository
 					+ "on (sd_user.id = request.id) " + "when matched then " + "    update set sd_user.age = 30",
 			nativeQuery = true)
 	int mergeNativeStatement();
+
+	@Query(value = "SELECT c.* FROM SD_User c WHERE c.firstname = :#{#user.firstname}", nativeQuery = true)
+	List<User> nativeQueryWithSpELStatement(@Param("user") User example);
+
+	@Query(value = "Select u from User u")
+	@QueryEnhancerOverride(MyCustomQueryEnhancer.class)
+	Page<User> findPageWithCustomQueryEnhancer(Pageable pageable);
 
 	interface RolesAndFirstname {
 

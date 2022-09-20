@@ -16,14 +16,22 @@
 package org.springframework.data.jpa.repository;
 
 import static java.util.Arrays.asList;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.data.domain.Example.of;
-import static org.springframework.data.domain.ExampleMatcher.*;
+import static org.springframework.data.domain.ExampleMatcher.GenericPropertyMatcher;
+import static org.springframework.data.domain.ExampleMatcher.StringMatcher;
+import static org.springframework.data.domain.ExampleMatcher.matching;
 import static org.springframework.data.domain.Sort.Direction.ASC;
 import static org.springframework.data.domain.Sort.Direction.DESC;
 import static org.springframework.data.jpa.domain.Specification.not;
 import static org.springframework.data.jpa.domain.Specification.where;
-import static org.springframework.data.jpa.domain.sample.UserSpecifications.*;
+import static org.springframework.data.jpa.domain.sample.UserSpecifications.userHasAgeLess;
+import static org.springframework.data.jpa.domain.sample.UserSpecifications.userHasFirstname;
+import static org.springframework.data.jpa.domain.sample.UserSpecifications.userHasFirstnameLike;
+import static org.springframework.data.jpa.domain.sample.UserSpecifications.userHasLastname;
+import static org.springframework.data.jpa.domain.sample.UserSpecifications.userHasLastnameLikeWithSort;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -34,7 +42,14 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import lombok.Data;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import org.assertj.core.api.SoftAssertions;
@@ -48,7 +63,14 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
-import org.springframework.data.domain.*;
+import org.springframework.data.domain.Example;
+import org.springframework.data.domain.ExampleMatcher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.domain.Sort.Order;
 import org.springframework.data.jpa.domain.Specification;
@@ -2974,9 +2996,30 @@ public class UserRepositoryTests {
 		assertThat(result).containsOnly(firstUser, secondUser);
 	}
 
+	@Test
+	void nativeQueryWithSpELStatementTest() {
+
+		String exampleFirstName = "Peter";
+		User firstPeter = new User(exampleFirstName, "2", "email1@test.com");
+		repository.save(firstPeter);
+
+		User secondPeter = new User(exampleFirstName, "2", "email2@test.com");
+		repository.save(secondPeter);
+
+		User firstDiego = new User("Diego", "2", "email3@test.com");
+		repository.save(firstDiego);
+
+		User exampleUser = new User(exampleFirstName, "IGNORE", "IGNORE@IGNORE.com");
+		List<User> foundData = repository.nativeQueryWithSpELStatement(exampleUser);
+
+		assertThat(foundData).hasSize(2);
+	}
+
 	@Test // GH-2593
 	void insertStatementModifyingQueryWorks() {
+
 		flushTestUsers();
+
 		repository.insertNewUserWithNativeQuery();
 
 		List<User> all = repository.findAll();
@@ -2990,7 +3033,9 @@ public class UserRepositoryTests {
 
 	@Test // GH-2593
 	void insertStatementModifyingQueryWithParamsWorks() {
+
 		flushTestUsers();
+
 		String testLastName = "TestLastName";
 		repository.insertNewUserWithParamNativeQuery(testLastName);
 
@@ -3019,6 +3064,19 @@ public class UserRepositoryTests {
 		assertThat(repository.findById(firstUser.getId())) //
 				.isPresent() //
 				.map(User::getAge).contains(30);
+	}
+
+	@Test // GH-2564
+	void customQueryEnhacerIsUsedWhenUsingChoice() {
+
+		flushTestUsers();
+
+		assertThat(repository.findAll()).hasSize(4);
+
+		// this should return there is only one element because our MyCustomQueryEnhancer has for "createCountQueryFor" a
+		// simple "Select 1"
+		Page<User> pageWithCustomQueryEnhancer = repository.findPageWithCustomQueryEnhancer(Pageable.ofSize(1));
+		assertThat(pageWithCustomQueryEnhancer.getTotalElements()).isEqualTo(1);
 	}
 
 	private Page<User> executeSpecWithSort(Sort sort) {

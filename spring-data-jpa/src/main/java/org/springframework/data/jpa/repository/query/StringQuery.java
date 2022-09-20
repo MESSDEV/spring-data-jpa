@@ -62,17 +62,32 @@ class StringQuery implements DeclaredQuery {
 	private final boolean usesJdbcStyleParameters;
 	private final boolean isNative;
 	private final QueryEnhancer queryEnhancer;
+	private final QueryEnhancerOverride queryEnhancerOverride;
 
 	/**
 	 * Creates a new {@link StringQuery} from the given JPQL query.
 	 *
 	 * @param query must not be {@literal null} or empty.
+	 * @param isNative is the query native or not
 	 */
 	@SuppressWarnings("deprecation")
 	StringQuery(String query, boolean isNative) {
+		this(query, isNative, null);
+	}
+
+	/**
+	 * Creates a new {@link StringQuery} from the given JPQL query.
+	 *
+	 * @param query must not be {@literal null} or empty.
+	 * @param isNative is the query native or not
+	 * @param queryEnhancerOverride the QueryEnhancer choice made by the dev. May be {@literal null}.
+	 */
+	@SuppressWarnings("deprecation")
+	StringQuery(String query, boolean isNative, @Nullable QueryEnhancerOverride queryEnhancerOverride) {
 
 		Assert.hasText(query, "Query must not be null or empty");
 
+		this.queryEnhancerOverride = queryEnhancerOverride;
 		this.isNative = isNative;
 		this.bindings = new ArrayList<>();
 		this.containsPageableInSpel = query.contains("#pageable");
@@ -86,6 +101,16 @@ class StringQuery implements DeclaredQuery {
 		this.queryEnhancer = QueryEnhancerFactory.forQuery(this);
 		this.alias = this.queryEnhancer.detectAlias();
 		this.hasConstructorExpression = this.queryEnhancer.hasConstructorExpression();
+	}
+
+	@Override
+	public QueryEnhancer getQueryEnhancer() {
+		return this.queryEnhancer;
+	}
+
+	@Override
+	public QueryEnhancerOverride getQueryEnhancerOverride() {
+		return this.queryEnhancerOverride;
 	}
 
 	/**
